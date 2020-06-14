@@ -448,7 +448,7 @@ def toml_provider(file_path, cmd_name):
 @click.option("-c", "--packet-limit", metavar="COUNT", type=int, default=2000,
               help="Number of stray packets after which the client is disconnected.")
 @click.option("--script-path", default=sys.path[0], help="path containing civpb-confirm-popup and civpb-kill scripts")
-@click_config_file.configuration_option(provider=toml_provider)
+@click_config_file.configuration_option(provider=toml_provider, implicit=False)
 @click_log.simple_verbosity_option()
 def main(interface, address, games, packet_limit, script_path):
     print(games, script_path)
