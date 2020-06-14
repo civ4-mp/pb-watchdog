@@ -151,6 +151,7 @@ class PBNetworkConnection:
         # 20 seconds elapse between two packages.
         if(now - self.time_last_incoming_packet < 22
            and now - self.watchdog_last_active_server_ts > 18):
+            logger.debug(f"{self!r} - detected no network reply.")
             game.no_network_reply()
 
         self.number_unanswered_outgoing_packets = 0
