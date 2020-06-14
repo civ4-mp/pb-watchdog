@@ -22,11 +22,8 @@ import socket
 import sys
 import os
 import logging
-from collections import defaultdict
 import traceback
-import datetime
 import subprocess
-import shlex
 from enum import Enum, unique
 
 import click
