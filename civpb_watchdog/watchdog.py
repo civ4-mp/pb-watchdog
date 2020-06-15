@@ -32,6 +32,8 @@ import click_config_file
 
 import toml
 
+from .metrics import GameMetrics, start_metric_server
+
 # Packets for sending fake client replies
 from .pyip import ip as pyip_ip
 from .pyip import udp as pyip_udp
@@ -45,11 +47,13 @@ click_log.basic_config(logger)
 
 class PBNetworkConnection:
     def __init__(self, client_ip, client_port, server_ip, server_port,
-                 packet_limit, now):
+                 packet_limit, now, game):
         self.client_ip = client_ip
         self.client_port = client_port
         self.server_ip = server_ip
         self.server_port = server_port
+
+        self.game = game
 
         self.packet_limit = packet_limit
         self.activity_timeout = 5 * 60
@@ -57,8 +61,8 @@ class PBNetworkConnection:
         self.number_unanswered_outgoing_packets = 0
         self.number_unanswered_incoming_packets = 0
         # Just unix timestamps
-        self.time_last_outgoing_packet = time.time()
-        self.time_last_incoming_packet = time.time()
+        self.time_last_outgoing_packet = now
+        self.time_last_incoming_packet = now
         self.time_disconnected = None
 
         # This timestamp will be updated for a subset of all
@@ -87,6 +91,8 @@ class PBNetworkConnection:
     def handle_server_to_client(self, payload, game, now):
         self.number_unanswered_outgoing_packets += 1
         self.time_last_outgoing_packet = now
+
+        self.game.metrics.send(len(payload))
 
         # logger.info("Package from Server, len={}".format( len(payload)))
         # logger.info("Content: {}".format(payload.hex()))
@@ -132,6 +138,8 @@ class PBNetworkConnection:
         self.disconnect(payload)
 
     def handle_client_to_server(self, payload, game, now):
+        self.game.metrics.recv(len(payload))
+
         if self.number_unanswered_outgoing_packets > 100:
             logger.debug("Received client data at {} after {} server packets / {} seconds.".
                           format(self,
@@ -211,7 +219,7 @@ class PBNetworkConnectionRegister:
         self.last_cleanup = time.time()
         self.cleanup_interval = 2 * 60
 
-    def get(self, client_ip, client_port, server_ip, server_port, now):
+    def get(self, client_ip, client_port, server_ip, server_port, now, game):
         # This is more efficient than .get, because then we don"t have to create a useless Client object if
         # Already exists
         connection_id = (client_ip, client_port, server_ip, server_port)
@@ -220,7 +228,8 @@ class PBNetworkConnectionRegister:
                 client_ip=client_ip, client_port=client_port,
                 server_ip=server_ip, server_port=server_port,
                 packet_limit=self.packet_limit,
-                now=now)
+                now=now, game=game)
+            game.metrics.connect()
         return self.connections[connection_id]
 
     def cleanup(self):
@@ -235,6 +244,7 @@ class PBNetworkConnectionRegister:
                 keys_to_del.append(con_id)
 
         for con_id in keys_to_del:
+            self.connections[con_id].game.disconnect()
             del self.connections[con_id]
         self.last_cleanup = time.time()
 
@@ -349,6 +359,8 @@ class ServerStatus:
         self.path = path_port[0]
         self.game_id = os.path.basename(os.path.realpath(self.path))
 
+        self.metrics = GameMetrics(self.game_id)
+
         # Waiting time until next strategy will be used.
         self.strategy_timeout_s = 30
         self.latest_strategy = Strategies.NO_STRATEGY
@@ -394,18 +406,22 @@ class ServerStatus:
             self.latest_strategy = Strategies.POPUP_CONFIRM
             logger.info("Simulate mouse click in game {}.".format(str(self.game_id)))
             self.popup_confirm()
+            self.metrics.revive("popup_confirm")
         elif self.latest_strategy == Strategies.POPUP_CONFIRM:
             self.latest_strategy = Strategies.RESTART_SAVE
             logger.info("Restart game {} with current save.".format(str(self.game_id)))
             self.restart_game(False)
+            self.metrics.revive("restart_current_save")
         elif self.latest_strategy == Strategies.RESTART_SAVE:
             self.latest_strategy = Strategies.RESTART_OLD_SAVE
             logger.info("Restart game {} with previous save.".format(str(self.game_id)))
             self.restart_game(True)
+            self.metrics.revive("restart_old_save")
         elif self.latest_strategy == Strategies.RESTART_OLD_SAVE:
             self.latest_strategy = Strategies.STOP_PB_SERVER
             logger.info("All restart strategies failed. Kill game {} and wait for manual recovery.".format(str(self.game_id)))
             self.stop_game()
+            self.metrics.revive("stop")
 
     def popup_confirm(self):
         subprocess.call([os.path.join(self.script_path, "civpb-confirm-popup"), str(self.game_id)])
@@ -446,12 +462,16 @@ def toml_provider(file_path, cmd_name):
 @click.option("-c", "--packet-limit", metavar="COUNT", type=int, default=2000,
               help="Number of stray packets after which the client is disconnected.")
 @click.option("--script-path", default=sys.path[0], help="path containing civpb-confirm-popup and civpb-kill scripts")
+@click.option("--prometheus", default="", help="enable prometheus metrics at given address:port, set to empty to disable")
 @click_config_file.configuration_option(provider=toml_provider, implicit=False)
 @click_log.simple_verbosity_option()
-def main(interface, address, games, packet_limit, script_path):
+def main(interface, address, games, packet_limit, script_path, prometheus):
     print(games, script_path)
     servers = ServerStatuses(games, script_path=script_path)
     port_list = servers.get_ports()
+
+    if prometheus:
+        start_metric_server(prometheus)
 
     connections = PBNetworkConnectionRegister(packet_limit=packet_limit)
 

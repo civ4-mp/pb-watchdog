@@ -16,6 +16,7 @@ setup(
         "click",
         "click-config-file",
         "click_log",
+        "prometheus_client",
         "scapy",
         "toml",
     ],
