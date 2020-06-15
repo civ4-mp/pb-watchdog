@@ -1,38 +1,55 @@
-from prometheus_client import start_http_server, Counter, Gauge, Info
+import logging
+import sys
+
+import pkg_resources
 
 import click_log
-import logging
-import pkg_resources
-import sys
+from prometheus_client import Counter, Gauge, Info, start_http_server
 
 logger = logging.getLogger(__name__)
 click_log.basic_config(logger)
 
-packets = Counter("civpb_watchdog_packets_total",
-                  "Number of observed packets by the Civilization 4 Pitboss watchdog",
-                  labelnames=("game", "direction"))
-packets_bytes = Counter("civpb_watchdog_packets_bytes_total",
-                        "Size of observed packets by the Civilization 4 Pitboss watchdog",
-                        labelnames=("game", "direction"))
-connections_concurrent = Gauge("civpb_watchdog_connections",
-                               "Number of active connections observed by the Civilization 4 Pitboss watchdog",
-                               labelnames=("game", ))
-connections_total = Counter("civpb_watchdog_connections_total",
-                            "Number of connections that were established by the Civilization 4 Pitboss watchdog",
-                            ("game", ))
-disconnects_total = Counter("civpb_watchdog_forced_disconnects_total",
-                            "Number of times a connection was forcibly disconnected by the Civilization 4 Pitboss watchdog",
-                            ("game", ))
-revives_total = Counter("civpb_watchdog_game_revives_total",
-                        "Number of times a game revive was attempted",
-                        ("game", "strategy"))
+packets = Counter(
+    "civpb_watchdog_packets_total",
+    "Number of observed packets by the Civilization 4 Pitboss watchdog",
+    labelnames=("game", "direction"),
+)
+packets_bytes = Counter(
+    "civpb_watchdog_packets_bytes_total",
+    "Size of observed packets by the Civilization 4 Pitboss watchdog",
+    labelnames=("game", "direction"),
+)
+connections_concurrent = Gauge(
+    "civpb_watchdog_connections",
+    "Number of active connections observed by the Civilization 4 Pitboss watchdog",
+    labelnames=("game",),
+)
+connections_total = Counter(
+    "civpb_watchdog_connections_total",
+    "Number of connections that were established by the Civilization 4 Pitboss watchdog",
+    ("game",),
+)
+disconnects_total = Counter(
+    "civpb_watchdog_forced_disconnects_total",
+    "Number of times a connection was forcibly disconnected by the Civilization 4 Pitboss watchdog",
+    ("game",),
+)
+revives_total = Counter(
+    "civpb_watchdog_game_revives_total",
+    "Number of times a game revive was attempted",
+    ("game", "strategy"),
+)
 
-info = Info("civpb_watchdog_info", "Civilization 4 Pitboss watchdog version information")
-info.info({
-    # https://stackoverflow.com/a/2073599/620382
-    "version": pkg_resources.require("civpb_watchdog")[0].version,
-    "python_version": sys.version,
-})
+info = Info(
+    "civpb_watchdog_info", "Civilization 4 Pitboss watchdog version information"
+)
+info.info(
+    {
+        # https://stackoverflow.com/a/2073599/620382
+        "version": pkg_resources.require("civpb_watchdog")[0].version,
+        "python_version": sys.version,
+    }
+)
 
 
 class GameMetrics:
