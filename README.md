@@ -1,7 +1,7 @@
 # Installation:
 
 ```
-cd civilization4-pitboss-watchdog 
+cd civilization4-pitboss-watchdog
 sudo apt install tcpdump python3-virtualenv
 virtualenv venv
 source ./venv/bin/activate
@@ -32,7 +32,7 @@ due security risks. See
 # Usage:
 
 see `civpb-watchdog --help`
-and	`make help`
+and `make help`
 
 Use 'examples/civpb-watchdog.toml' as boilerplate for a
 proper config file.
