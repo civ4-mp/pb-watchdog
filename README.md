@@ -1,36 +1,42 @@
 # Installation:
 
 ```
-sudo apt install tcpdump
+cd civilization4-pitboss-watchdog 
+sudo apt install tcpdump python3-virtualenv
+virtualenv venv
+source ./venv/bin/activate
 pip install .
 ```
-
-# Usage
-
-see `civpb-watchdog --help`
-
-## Stopping the program:
-  Long press(!) of Ctrl+C.
-
-## Sketch for usage of pitboss_watchdog without sudo:
-
-It runs with `AmbientCapabilities=CAP_NET_RAW`
+## Installation as systemd service:
+```
+make install_service
+```
 
 ## Alternatively
 
-Give Python3 network access
+You could also give Python3 network access. This is not recommended,
+due security risks. See
 
 ```
-  cp /usr/bin/python3 .
-  sudo setcap cap_net_raw=+ep ./python3
+  make network_cap_info
+```
 
-  # tcpdump need also acces on network interfaces
-  # Laut https://askubuntu.com/questions/530920/tcpdump-permissions-problem 
+  Mayby tcpdump need also access on network interfaces
   sudo groupadd pcap
-  sudo usermod -a -G pcap ramkhamhaeng
-
+  sudo usermod -a -G pcap ${USER}
   sudo chgrp pcap /usr/sbin/tcpdump
   sudo chmod 750 /usr/sbin/tcpdump
 
   sudo setcap cap_net_raw=ep /usr/sbin/tcpdump
-```
+
+# Usage:
+
+see `civpb-watchdog --help`
+and	`make help`
+
+Use 'examples/civpb-watchdog.toml' as boilerplate for a
+proper config file.
+
+
+## Stopping the program:
+  Long press(!) of Ctrl+C.

@@ -6,10 +6,13 @@ After=network.service
 Type=simple
 User={USER}
 Group={GROUP}
-ExecStart=/usr/bin/python3 civpb-watchdog.py {WATCHDOG_ARGS}
+WorkingDirectory={VENV_DIR}
+# Attention, this gives wrong executable network capabilities (setcap ...)
+# ExecStart={VENV_DIR}/bin/civpb-watchdog --config {VENV_DIR}/civpb-watchdog.toml
+# but this works
+ExecStart={VENV_DIR}/bin/python bin/civpb-watchdog --config {VENV_DIR}/civpb-watchdog.toml
 Restart=always
 RestartSec=60
-#TimeoutSec=60
 AmbientCapabilities=CAP_NET_RAW
 
 [Install]

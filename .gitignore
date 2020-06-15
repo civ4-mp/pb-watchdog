@@ -1,4 +1,5 @@
 venv
+civpb-watchdog.service
 civpb_watchdog.egg-info/
 civpb_watchdog/__pycache__/
 civpb_watchdog/pyip/__pycache__/
