@@ -22,14 +22,14 @@ help:
 		"make uninstall_service   -- Uninstall systemd service\n" \
 		"make log                 -- Show journalctl log\n" \
 		"\n" \
-		"make control_service_without_sudo -- Allow start, stop and reload without sudo\n" \
+		"make control_service_without_sudo -- Allow start, stop and reload\n" \
+		"                                     of systemd service without sudo\n" \
 		"\n" \
 		"" \
 
 run: network_cap_info $(VENV_DIR)
 	source ./venv/bin/activate && cd "$(VENV_DIR)" \
-		&& python bin/civpb-watchdog --config $(VENV_DIR)/civpb-watchdog.toml \
-		# && deactivate
+		&& python bin/civpb-watchdog --config $(VENV_DIR)/civpb-watchdog.toml
 
 venv: $(VENV_DIR)
 	@echo "Init virtual environment and install program into."
@@ -90,5 +90,5 @@ network_cap_info:
 		"to create service or\n" \
 		"create local python binary with enough rights (security risk).\n" \
 		"\trm $(shell basename "$(VENV_DIR)")/bin/python\n" \
-		"\tcp python $(shell basename "$(VENV_DIR)")/bin/python\n" \
+		"\tcp $(shell which python) $(shell basename "$(VENV_DIR)")/bin/python\n" \
 		"\tsudo setcap cap_net_raw=ep $(shell basename "$(VENV_DIR)")/bin/python \n" \
