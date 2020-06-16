@@ -211,6 +211,7 @@ class PBNetworkConnection:
         sock.sendto(raw_ip, (ipacket.dst, 0))
         self.time_disconnected = time.time()
         self.number_unanswered_outgoing_packets = 0
+        self.game.metrics.force_disconnect()
 
     def is_active(self):
         now = time.time()
@@ -258,7 +259,7 @@ class PBNetworkConnectionRegister:
                 keys_to_del.append(con_id)
 
         for con_id in keys_to_del:
-            self.connections[con_id].game.disconnect()
+            self.connections[con_id].game.metrics.disconnect()
             del self.connections[con_id]
         self.last_cleanup = time.time()
 
