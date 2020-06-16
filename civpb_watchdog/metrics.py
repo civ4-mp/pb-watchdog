@@ -64,26 +64,26 @@ class GameMetrics:
         self._disconnects_total = disconnects_total.labels(game=game_id)
         self._game = game_id
 
-        def send(size):
-            self._packets_out.inc()
-            self._packets_out_bytes.inc(size)
+    def send(self, size):
+        self._packets_out.inc()
+        self._packets_out_bytes.inc(size)
 
-        def recv(size):
-            self._packets_in.inc()
-            self._packets_in_bytes.inc(size)
+    def recv(self, size):
+        self._packets_in.inc()
+        self._packets_in_bytes.inc(size)
 
-        def connect():
-            self._connections_total.inc()
-            self._connections_concurrent.inc()
+    def connect(self):
+        self._connections_total.inc()
+        self._connections_concurrent.inc()
 
-        def disconnect():
-            self._connections_concurrent.dec()
+    def disconnect(self):
+        self._connections_concurrent.dec()
 
-        def force_disconnect():
-            self._disconnects_total.inc()
+    def force_disconnect(self):
+        self._disconnects_total.inc()
 
-        def revive(strategy):
-            revives_total.labels(game=game_id, strategy=strategy).inc()
+    def revive(self, strategy):
+        revives_total.labels(game=self.game_id, strategy=strategy).inc()
 
 
 def start_metric_server(spec):
