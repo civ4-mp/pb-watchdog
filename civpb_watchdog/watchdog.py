@@ -90,7 +90,7 @@ class PBNetworkConnection:
             s += " inactive"
         return s
 
-    def handle_server_to_client(self, payload, game, now):
+    def handle_server_to_client(self, payload, now):
         self.number_unanswered_outgoing_packets += 1
         self.time_last_outgoing_packet = now
 
@@ -117,7 +117,7 @@ class PBNetworkConnection:
 
         if len(payload) not in [3, 8]:
             self.watchdog_last_active_server_ts = self.time_last_outgoing_packet
-            game.network_reply()
+            self.game.network_reply()
 
         # TODO Check if we can also use different payload sizes here, but we
         # need to make sure the specific information about the
@@ -139,7 +139,7 @@ class PBNetworkConnection:
         # but the packet count seems do be the better metric.
         self.disconnect(payload)
 
-    def handle_client_to_server(self, payload, game, now):
+    def handle_client_to_server(self, payload, now):
         self.game.metrics.recv(len(payload))
 
         if self.number_unanswered_outgoing_packets > 100:
@@ -164,7 +164,7 @@ class PBNetworkConnection:
             and now - self.watchdog_last_active_server_ts > 18
         ):
             logger.debug(f"{self!r} - detected no network reply.")
-            game.no_network_reply()
+            self.game.no_network_reply()
 
         self.number_unanswered_outgoing_packets = 0
         self.time_last_incoming_packet = now
@@ -326,13 +326,13 @@ def analyze_udp_traffic(
         if ip.src == ip_address:
             game = games.get(udp.sport)
             connections.get(
-                ip.dst, udp.dport, ip.src, udp.sport, now
-            ).handle_server_to_client(payload, game, now)
+                ip.dst, udp.dport, ip.src, udp.sport, now, game
+            ).handle_server_to_client(payload, now)
         elif ip.dst == ip_address:
             game = games.get(udp.dport)
             connections.get(
-                ip.src, udp.sport, ip.dst, udp.dport, now
-            ).handle_client_to_server(payload, game, now)
+                ip.src, udp.sport, ip.dst, udp.dport, now, game
+            ).handle_client_to_server(payload, now)
         else:
             logger.warning(
                 "PB server matches neither source ({}) nor destination ({})".format(
