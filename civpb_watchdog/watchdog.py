@@ -541,7 +541,7 @@ def toml_provider(file_path, cmd_name):
     help="enable prometheus metrics at given address:port, set to empty to disable",
 )
 @click_config_file.configuration_option(provider=toml_provider, implicit=False)
-@click_log.simple_verbosity_option()
+@click_log.simple_verbosity_option(logger)
 def main(interface, address, games, packet_limit, script_path, prometheus):
     print(games, script_path)
     servers = ServerStatuses(games, script_path=script_path)
