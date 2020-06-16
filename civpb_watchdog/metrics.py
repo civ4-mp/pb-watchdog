@@ -40,9 +40,7 @@ revives_total = Counter(
     ("game", "strategy"),
 )
 
-info = Info(
-    "civpb_watchdog_info", "Civilization 4 Pitboss watchdog version information"
-)
+info = Info("civpb_watchdog", "Civilization 4 Pitboss watchdog version information")
 info.info(
     {
         # https://stackoverflow.com/a/2073599/620382
