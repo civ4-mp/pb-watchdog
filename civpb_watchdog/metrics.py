@@ -81,7 +81,7 @@ class GameMetrics:
         self._disconnects_total.inc()
 
     def revive(self, strategy):
-        revives_total.labels(game=self.game_id, strategy=strategy).inc()
+        revives_total.labels(game=self._game, strategy=strategy).inc()
 
 
 def start_metric_server(spec):
