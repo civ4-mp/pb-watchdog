@@ -75,8 +75,8 @@ class PBNetworkConnection:
         logger.debug("Detecting new connection {}".format(self))
 
     def __str__(self):
-        return "connection[{}:{}->{}:{}]".format(
-            self.client_ip, self.client_port, self.server_ip, self.server_port
+        return "connection[{}:{}->{}]".format(
+            self.client_ip, self.client_port, self.game.game_id
         )
 
     def __repr__(self):
