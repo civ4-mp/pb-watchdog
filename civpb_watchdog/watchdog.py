@@ -324,9 +324,10 @@ def analyze_udp_traffic(
         payload = udp.load
         now = time.time()  # In pycap already part of "pkt" but not in scapy
 
-        dump_packets.write(
-            f"{now}|{ip.src}:{udp.sport}|{ip.dst}:{udp.dport}|{len(payload)}|{payload.hex()}"
-        )
+        if dump_packets:
+            dump_packets.write(
+                f"{now}|{ip.src}:{udp.sport}|{ip.dst}:{udp.dport}|{len(payload)}|{payload.hex()}"
+            )
 
         if ip.src == ip_address:
             game = games.get(udp.sport)
