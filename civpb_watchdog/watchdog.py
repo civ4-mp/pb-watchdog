@@ -305,7 +305,7 @@ def portlist_to_filter(portlist_str):
 # === Analyse Traffic ===
 # Ideally this function should run forever, but in case of odd errors we return outside to wait a bit
 def analyze_udp_traffic(
-    device, ip_address, pcap_filter, connections, games, pcap_timeout
+    device, ip_address, pcap_filter, connections, games, pcap_timeout, dump_packets
 ):
     def pb_traffic_monitor_callback(pkt):
 
@@ -323,6 +323,10 @@ def analyze_udp_traffic(
         udp = pkt[UDP]
         payload = udp.load
         now = time.time()  # In pycap already part of "pkt" but not in scapy
+
+        dump_packets.write(
+            f"{now}|{ip.src}:{udp.sport}|{ip.dst}:{udp.dport}|{len(payload)}|{payload.hex()}"
+        )
 
         if ip.src == ip_address:
             game = games.get(udp.sport)
@@ -540,9 +544,12 @@ def toml_provider(file_path, cmd_name):
     default="",
     help="enable prometheus metrics at given address:port, set to empty to disable",
 )
+@click.option("--dump-packets", default=None, type=click.File("w+"))
 @click_config_file.configuration_option(provider=toml_provider, implicit=False)
 @click_log.simple_verbosity_option(logger)
-def main(interface, address, games, packet_limit, script_path, prometheus):
+def main(
+    interface, address, games, packet_limit, script_path, prometheus, dump_packets
+):
     print(games, script_path)
     servers = ServerStatuses(games, script_path=script_path)
     port_list = servers.get_ports()
@@ -566,6 +573,7 @@ def main(interface, address, games, packet_limit, script_path, prometheus):
                 connections,
                 servers,
                 pcap_timeout=500,
+                dump_packets=dump_packets,
             )
         except Exception as e:
             logger.error("Caught exception {}".format(e))
