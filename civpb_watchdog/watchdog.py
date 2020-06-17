@@ -326,7 +326,7 @@ def analyze_udp_traffic(
 
         if dump_packets:
             dump_packets.write(
-                f"{now}|{ip.src}:{udp.sport}|{ip.dst}:{udp.dport}|{len(payload)}|{payload.hex()}"
+                f"{now}|{ip.src}:{udp.sport}|{ip.dst}:{udp.dport}|{len(payload)}|{payload.hex()}\n"
             )
 
         if ip.src == ip_address:
@@ -564,6 +564,10 @@ def main(
     logger.info(
         "Listening on: {} for ip: {}, ports: {}".format(interface, address, port_list)
     )
+
+    if dump_packets:
+        logger.info("dumping all packets")
+        dump_packets.write("starting packet dump\n")
 
     while True:
         try:
