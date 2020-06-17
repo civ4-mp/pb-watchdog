@@ -9,12 +9,12 @@ from prometheus_client import Counter, Gauge, Info, start_http_server
 logger = logging.getLogger(__name__)
 click_log.basic_config(logger)
 
-packets = Counter(
+packets_total = Counter(
     "civpb_watchdog_packets_total",
     "Number of observed packets by the Civilization 4 Pitboss watchdog",
     labelnames=("game", "direction"),
 )
-packets_bytes = Counter(
+packets_bytes_total = Counter(
     "civpb_watchdog_packets_bytes_total",
     "Size of observed packets by the Civilization 4 Pitboss watchdog",
     labelnames=("game", "direction"),
@@ -52,10 +52,14 @@ info.info(
 
 class GameMetrics:
     def __init__(self, game_id):
-        self._packets_out = packets.labels(game=game_id, direction="out")
-        self._packets_in = packets.labels(game=game_id, direction="in")
-        self._packets_out_bytes = packets_bytes.labels(game=game_id, direction="out")
-        self._packets_in_bytes = packets_bytes.labels(game=game_id, direction="in")
+        self._packets_out = packets_total.labels(game=game_id, direction="out")
+        self._packets_in = packets_total.labels(game=game_id, direction="in")
+        self._packets_out_bytes = packets_bytes_total.labels(
+            game=game_id, direction="out"
+        )
+        self._packets_in_bytes = packets_bytes_total.labels(
+            game=game_id, direction="in"
+        )
 
         self._connections_concurrent = connections_concurrent.labels(game=game_id)
         self._connections_total = connections_total.labels(game=game_id)
