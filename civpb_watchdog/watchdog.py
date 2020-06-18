@@ -75,12 +75,12 @@ class Watchdog:
 
         with self._connections.lock:
             if ip.src == self._ip_address:
-                game = self._games.get(udp.sport)
+                game = self._games[udp.sport]
                 self._connections.get(
                     ip.dst, udp.dport, ip.src, udp.sport, now, game
                 ).handle_server_to_client(payload, now)
             elif ip.dst == self._ip_address:
-                game = self._games.get(udp.dport)
+                game = self._games[udp.dport]
                 self._connections.get(
                     ip.src, udp.sport, ip.dst, udp.dport, now, game
                 ).handle_client_to_server(payload, now)
