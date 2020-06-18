@@ -20,6 +20,7 @@
 import logging
 import sys
 import time
+import traceback
 from datetime import datetime
 
 import click
@@ -115,6 +116,7 @@ class Watchdog:
                 return
             except Exception as e:
                 logger.error("exception from sniffing: {}".format(e))
+                logger.error(traceback.format_exc())
             else:
                 logger.error("sniff returned normally, this should never happen.")
 
