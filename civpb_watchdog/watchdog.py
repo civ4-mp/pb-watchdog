@@ -18,13 +18,9 @@
 #
 
 import logging
-import os
-import socket
-import subprocess
 import sys
 import time
-import traceback
-from enum import Enum, unique
+from datetime import datetime
 
 import click
 import toml
@@ -36,469 +32,95 @@ import click_log
 import scapy
 from scapy.all import IP, UDP, sniff
 
-from .metrics import GameMetrics, capture_errors_total, start_metric_server
+from .connection import ConnectionRegister
+from .game import Game
+from .metrics import capture_errors_total, start_metric_server
 
-# Packets for sending fake client replies
-from .pyip import ip as pyip_ip
-from .pyip import udp as pyip_udp
-
-logger = logging.getLogger(__name__)
+# Use root logger here, so other loggers inherit the configuration
+logger = logging.getLogger()
 click_log.basic_config(logger)
 
 
-class PBNetworkConnection:
+class Watchdog:
     def __init__(
-        self, client_ip, client_port, server_ip, server_port, packet_limit, now, game
+        self, ip_address, game_args, packet_limit, script_path, dump_packets,
     ):
-        self.client_ip = client_ip
-        self.client_port = client_port
-        self.server_ip = server_ip
-        self.server_port = server_port
+        self._script_path = script_path
+        self._dump_packets = dump_packets
+        self._packet_limit = packet_limit
 
-        self.game = game
+        self._connections = ConnectionRegister()
+        self._games = {}
+        for game_arg in game_args:
+            game = Game(game_arg, self)
+            self._games[game.port]
 
-        self.packet_limit = packet_limit
-        self.activity_timeout = 5 * 60
+        self._ip_address = ip_address
 
-        self.number_unanswered_outgoing_packets = 0
-        self.number_unanswered_incoming_packets = 0
-        # Just unix timestamps
-        self.time_last_outgoing_packet = now
-        self.time_last_incoming_packet = now
-        self.time_disconnected = None
-
-        # This timestamp will be updated for a subset of all
-        # outgoing packages.
-        # We assume an active server due the creation of this object
-        # to avoid false detection of inactivity.
-        # opposed to it's sibling time_last_outgoing_packet, this does not
-        # count payload sizes of 5 or 10
-        self.time_last_outgoing_active_packet = self.time_last_outgoing_packet
-
-        logger.debug("Detecting new connection {}".format(self))
-
-    def __str__(self):
-        return "connection[{}:{}->{}]".format(
-            self.client_ip, self.client_port, self.game.game_id
-        )
-
-    def __repr__(self):
-        s = self.__str__()
-        s += "#p: {}, t_in: {}, t_out: {}".format(
-            self.number_unanswered_outgoing_packets,
-            self.time_last_incoming_packet,
-            self.time_last_outgoing_packet,
-        )
-        if not self.is_active():
-            s += " inactive"
-        return s
-
-    def handle_server_to_client(self, payload, now):
-        self.number_unanswered_outgoing_packets += 1
-        self.time_last_outgoing_packet = now
-
-        # Add 28 bytes for UDP (8) and IP headers (20)
-        self.game.metrics.send(len(payload) + 28)
-
-        # logger.info("Package from Server, len={}".format( len(payload)))
-        # logger.info("Content: {}".format(payload.hex()))
-
-        # == Watchdog functionality ==
-        # If the game hangs with a "save error" popup only packages with
-        # payload length 3 or 8 will be send. For examples:
-        #     (fefe) 640009
-        #     (fefe) 0000590009dcdc01
-        #     (fefe) 64000a
-        #     (fefe) 00005a000adcdc01
-        # udp prefix
-        #
-        # If the game runs normal most idle packages has a
-        # payload length of 23, i. e
-        # (fefe) 00023b000bfdffffff01ffffffff143f02003d02000001
-        #
-        # Thus, if we ignore packages with length 3 and 8 we"ve
-        # got an indicator for the server sanity.
-
-        if len(payload) not in [5, 10]:
-            self.time_last_outgoing_active_packet = self.time_last_outgoing_packet
-            self.game.network_reply()
-
-        # TODO Check if we can also use different payload sizes here, but we
-        # need to make sure the specific information about the
-        # two 16bit numbers "A, B" is available.
-        if len(payload) not in [25, 37]:
-            return
-
-        # This package could be indicate an upload error. Add the payload
-        # for this client (destination IP) to an set. Force analysis
-        # of the packages if an sufficient amount of packages reached.
-        #
-        # The length 35 occurs if the connections was aborted during the loading
-        # of a game.
-
-        if self.number_unanswered_outgoing_packets < self.packet_limit:
-            return
-
-        # TODO We could also check the time here,
-        # but the packet count seems do be the better metric.
-        self.disconnect(payload)
-
-    def handle_client_to_server(self, payload, now):
-        self.game.metrics.recv(len(payload))
-
-        if self.number_unanswered_outgoing_packets > 100:
-            logger.debug(
-                "Received client data at {} after {} server packets / {} seconds.".format(
-                    self,
-                    self.number_unanswered_outgoing_packets,
-                    now - self.time_last_incoming_packet,
-                )
-            )
-
-        # logger.info("Package to Server, len={}".format(len(payload)))
-
-        # Check if server is available. First check guarantee that
-        # first package of new client do not produce false positives.
-        #
-        # Note: This simple approach does only work for periods > 20s!
-        # If a single client try to join a blockaded game, at most
-        # 20 seconds elapse between two packages.
-        if (
-            now - self.time_last_incoming_packet < 22
-            and now - self.time_last_outgoing_active_packet > 18
-        ):
-            logger.debug(f"{self!r} - detected no network reply.")
-            self.game.no_network_reply()
-
-        self.number_unanswered_outgoing_packets = 0
-        self.time_last_incoming_packet = now
-
-    def disconnect(self, payload):
-        # TODO Throttle disconnects!
-        # Send fake packet to stop upload
-        # Structure of content:
-        #     254 254 06 B (A+1) (7 bytes)
-        #
-        # First 2 bytes marks it as udp paket(?!)
-        # Thrid bytes is command (close connection to client)
-        #   B and A+1 are to 16 bit numbers where A and B
-        #   are content of "payload"
-
-        aHi, aLow = payload[3], payload[4]
-        bHi, bLow = payload[5], payload[6]
-        a_plus_1 = (aHi * 256 + aLow + 1) % 65536
-
-        data = bytes([254, 254, 6, bHi, bLow, int(a_plus_1 / 256), (a_plus_1 % 256)])
-
-        logger.info("Disconnecting client at {!r}".format(self))
-        upacket = pyip_udp.Packet()
-        upacket.sport = self.client_port
-        upacket.dport = self.server_port
-        upacket.data = data
-
-        ipacket = pyip_ip.Packet()
-        ipacket.src = self.client_ip
-        ipacket.dst = self.server_ip
-        ipacket.df = 1
-        ipacket.ttl = 64
-        ipacket.p = 17
-
-        ipacket.data = pyip_udp.assemble(upacket, False)
-        raw_ip = pyip_ip.assemble(ipacket, 1)
-
-        # Send fake packet to the PB server that looks like its coming from the client
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-        except socket.error as e:
-            logger.error("Socket could not be created: {}".format(e))
-
-        sock.sendto(raw_ip, (ipacket.dst, 0))
-        self.time_disconnected = time.time()
-        self.number_unanswered_outgoing_packets = 0
-        self.game.metrics.force_disconnect()
-
-    def is_active(self):
-        now = time.time()
-        inactive_time = now - max(
-            self.time_last_incoming_packet, self.time_last_outgoing_packet
-        )
-        return inactive_time < self.activity_timeout
-
-
-class PBNetworkConnectionRegister:
-    def __init__(self, packet_limit):
-        self.packet_limit = packet_limit
-        self.connections = {}
-        self.last_cleanup = time.time()
-        self.cleanup_interval = 2 * 60
-
-    def get(self, client_ip, client_port, server_ip, server_port, now, game):
-        # This is more efficient than .get, because then we don"t have to create a useless Client object if
-        # Already exists
-        connection_id = (client_ip, client_port, server_ip, server_port)
-        if connection_id not in self.connections:
-            self.connections[connection_id] = PBNetworkConnection(
-                client_ip=client_ip,
-                client_port=client_port,
-                server_ip=server_ip,
-                server_port=server_port,
-                packet_limit=self.packet_limit,
-                now=now,
-                game=game,
-            )
-            game.metrics.connect()
-        return self.connections[connection_id]
-
-    def cleanup(self):
-        if (time.time() - self.last_cleanup) < self.cleanup_interval:
-            return
-
-        logger.debug(
-            "Starting cleanup for {} connections.".format(len(self.connections))
-        )
-        keys_to_del = []
-        for (con_id, con) in self.connections.items():
-            logger.debug("{!r}".format(con))
-            if not con.is_active():
-                keys_to_del.append(con_id)
-
-        for con_id in keys_to_del:
-            self.connections[con_id].game.metrics.disconnect()
-            del self.connections[con_id]
-        self.last_cleanup = time.time()
-
-
-# Converts portlist in 2056-2060,2070 format to pcap filter format
-# Note: Filter does not respect PB host ip"
-def portlist_to_filter(portlist_str):
-    port_str = "udp and ( "
-    portlist_first = True
-    portlist = str(portlist_str).split(",")
-    for p in portlist:
-        if p == "-1":
-            logger.debug(
-                "Skip negative port number. "
-                "Check given arguments for invalid port/game folder."
-            )
-            continue
-
-        portrange = p.split("-")
-        if not portlist_first:
-            port_str += " or "
-        else:
-            portlist_first = False
-
-        if len(portrange) == 2:
-            port_str += "portrange {}-{}".format(int(portrange[0]), int(portrange[1]))
-        elif len(portrange) == 1:
-            port_str += "port {}".format(int(portrange[0]))
-        else:
-            raise Exception('Failed to parse portlist "{}"'.format(portlist_str))
-
-    port_str += " )"
-
-    if portlist_first:
-        raise Exception(
-            'Failed to parse portlist "{}". No valid ports given?!'
-            "".format(portlist_str)
-        )
-
-    return port_str
-
-
-# === Analyse Traffic ===
-# Ideally this function should run forever, but in case of odd errors we return outside to wait a bit
-def analyze_udp_traffic(
-    device, ip_address, filter, connections, games, timeout, dump_packets
-):
-    def pb_traffic_monitor_callback(pkt):
+    def _handle_packet(self, pkt):
         if not (IP in pkt and UDP in pkt):
             # May be true if some port scanner knocks on PBServer port?!
             # The current traffic filter prevent getting such packets here.
             return
-
-        assert IP in pkt, "No IP packet"
-        assert UDP in pkt, "Packet is no UDP traffic"
 
         ip = pkt[IP]
         udp = pkt[UDP]
         payload = udp.payload.original
         now = pkt.time
 
-        if dump_packets:
-            dump_packets.write(
+        if self._dump_packets:
+            self._dump_packets.write(
                 f"{now}|{ip.src}:{udp.sport}|{ip.dst}:{udp.dport}|{len(payload)}|{payload.hex()}\n"
             )
 
-        if ip.src == ip_address:
-            game = games.get(udp.sport)
-            connections.get(
-                ip.dst, udp.dport, ip.src, udp.sport, now, game
-            ).handle_server_to_client(payload, now)
-        elif ip.dst == ip_address:
-            game = games.get(udp.dport)
-            connections.get(
-                ip.src, udp.sport, ip.dst, udp.dport, now, game
-            ).handle_client_to_server(payload, now)
-        else:
-            logger.warning(
-                "PB server matches neither source ({}) nor destination ({})".format(
-                    ip.src, ip.dst
+        with self._connections.lock:
+            if ip.src == self._ip_address:
+                game = self._games.get(udp.sport)
+                self._connections.get(
+                    ip.dst, udp.dport, ip.src, udp.sport, now, game
+                ).handle_server_to_client(payload, now)
+            elif ip.dst == self._ip_address:
+                game = self._games.get(udp.dport)
+                self._connections.get(
+                    ip.src, udp.sport, ip.dst, udp.dport, now, game
+                ).handle_client_to_server(payload, now)
+            else:
+                logger.warning(
+                    "PB server matches neither source ({}) nor destination ({})".format(
+                        ip.src, ip.dst
+                    )
                 )
-            )
 
-        connections.cleanup()
+    @property
+    def _filter(self):
+        f = "udp and ("
+        f += " or ".join([game.port for game in self._games])
+        f += ")"
+        logging.debug(f"Using filter: '{f}'")
+        return f
 
-    capture_errors = 0
-    while True:
-        connections.cleanup()
-        try:
-            # This should never complete without an exception
-            sniff(
-                prn=pb_traffic_monitor_callback,
-                filter=filter,
-                timeout=timeout,
-                store=0,
-                count=0,  # Capture until SIGINT
-                iface=device,  # None for sniffing on all.
-            )
-        except KeyboardInterrupt:
-            return
-        except Exception as e:
-            logger.error("exception from sniffing: {}".format(e))
-        else:
-            logger.error("sniff returned normally, this should never happen")
-
-        capture_errors_total.inc()  # collect metrics
-        time.sleep(10)
-
-
-# Strategies of civpb_watchdog
-@unique
-class Strategies(Enum):
-    NO_STRATEGY = 0
-    POPUP_CONFIRM = 1
-    RESTART_SAVE = 2
-    RESTART_OLD_SAVE = 3
-    STOP_PB_SERVER = 4
-
-
-# Store data for civpb_watchdog functionality
-class ServerStatus:
-    def __init__(self, altroot_and_port_str, script_path):
-        self.script_path = script_path
-        path_port = altroot_and_port_str.split("=")
-
-        self.path = path_port[0]
-        self.game_id = os.path.basename(os.path.realpath(self.path))
-
-        self.metrics = GameMetrics(self.game_id)
-
-        # Waiting time until next strategy will be used.
-        self.strategy_timeout_s = 30
-        self.latest_strategy = Strategies.NO_STRATEGY
-        self.latest_strategy_ts = time.time()
-
-        try:
-            self.port = int(path_port[1])
-        except IndexError:
-            self.port = self.get_port_from_ini(self.path)
-        logger.info(
-            f"Setup ServerStatus game_id: {self.game_id} path: {self.path} port: {self.port}"
-        )
-
-    @staticmethod
-    def get_port_from_ini(path):
-        port = None
-        ini_path = os.path.join(path, "CivilizationIV.ini")
-        try:
-            with open(ini_path, "r") as f:
-                for line in f:
-                    if "Port=" in line[:5]:
-                        port = int(line[5:])
-                        break
-        except IOError:
-            logger.warning(
-                "Could not read port from {}. Wrong altroot path?".format(ini_path)
-            )
-        if port is None:
-            raise RuntimeError(f"No port found in ini file {ini_path}")
-        return port
-
-    # Server is active. Reset civpb_watchdog
-    def network_reply(self):
-        if self.latest_strategy != Strategies.NO_STRATEGY:
-            logger.info(
-                "Server of game {} is online again. Reset strategies.".format(
-                    str(self.game_id)
+    def analyze_traffic(self, device):
+        while True:
+            try:
+                # With timeout = None and count = 0, this should never complete without an exception
+                sniff(
+                    prn=self._handle_packet,
+                    filter=self._filter,
+                    timeout=None,
+                    store=0,
+                    count=0,
+                    iface=device,  # None for sniffing on all.
                 )
-            )
-            self.latest_strategy = Strategies.NO_STRATEGY
-            self.latest_strategy_ts = (
-                time.time()
-            )  # Reset on strategy changes only should be fine.
+            except KeyboardInterrupt:
+                logger.info("stopping watchdog.")
+                return
+            except Exception as e:
+                logger.error("exception from sniffing: {}".format(e))
+            else:
+                logger.error("sniff returned normally, this should never happen.")
 
-    # Server not responding. Try several awakening strategies.
-    def no_network_reply(self):
-        now = time.time()
-        if (now - self.latest_strategy_ts) < self.strategy_timeout_s:
-            return
-        self.latest_strategy_ts = now
-
-        if self.latest_strategy == Strategies.NO_STRATEGY:
-            self.latest_strategy = Strategies.POPUP_CONFIRM
-            logger.info("Simulate mouse click in game {}.".format(str(self.game_id)))
-            self.popup_confirm()
-            self.metrics.revive("popup_confirm")
-        elif self.latest_strategy == Strategies.POPUP_CONFIRM:
-            self.latest_strategy = Strategies.RESTART_SAVE
-            logger.info("Restart game {} with current save.".format(str(self.game_id)))
-            self.restart_game(False)
-            self.metrics.revive("restart_current_save")
-        elif self.latest_strategy == Strategies.RESTART_SAVE:
-            self.latest_strategy = Strategies.RESTART_OLD_SAVE
-            logger.info("Restart game {} with previous save.".format(str(self.game_id)))
-            self.restart_game(True)
-            self.metrics.revive("restart_old_save")
-        elif self.latest_strategy == Strategies.RESTART_OLD_SAVE:
-            self.latest_strategy = Strategies.STOP_PB_SERVER
-            logger.info(
-                "All restart strategies failed. Kill game {} and wait for manual recovery.".format(
-                    str(self.game_id)
-                )
-            )
-            self.stop_game()
-            self.metrics.revive("stop")
-
-    def popup_confirm(self):
-        subprocess.call(
-            [os.path.join(self.script_path, "civpb-confirm-popup"), str(self.game_id)]
-        )
-
-    def restart_game(self, previous_save=False):
-        args = ["-p"] if previous_save else []
-        args.append(str(self.game_id))
-        subprocess.call([os.path.join(self.script_path, "civpb-kill"), *args])
-
-    def stop_game(self):
-        subprocess.call(
-            [os.path.join(self.script_path, "civpb-kill"), "-s", str(self.game_id)]
-        )
-
-
-class ServerStatuses:
-    def __init__(self, games_str, script_path):
-        self.games = {}
-        for game_str in games_str:
-            game = ServerStatus(game_str, script_path)
-            self.games[game.port] = game
-
-    def get_ports(self):
-        p = [str(g.port) for g in self.games.values()]
-        return ",".join(p)
-
-    def get(self, key):
-        return self.games[key]
+            capture_errors_total.inc()  # collect metrics
+            time.sleep(10)
 
 
 def toml_provider(file_path, cmd_name):
@@ -527,7 +149,7 @@ def toml_provider(file_path, cmd_name):
     required=True,
     multiple=True,
     metavar="GAME",
-    help="Altroot directory to a Pitboss game, syntax:\n Path[=Port]\nIf omitted, the port will read from CivilizationIV.ini.",
+    help="Altroot directory to a Pitboss game, syntax:\n Path[:Port]\nIf omitted, the port will read from CivilizationIV.ini.",
 )
 @click.option(
     "-c",
@@ -564,32 +186,19 @@ def main(
     if use_pcap:
         scapy.config.conf.use_pcap = True
 
-    servers = ServerStatuses(games, script_path=script_path)
-    port_list = servers.get_ports()
-
     if prometheus:
         start_metric_server(prometheus)
 
     connections = PBNetworkConnectionRegister(packet_limit=packet_limit)
 
     logger.info("Pitboss upload killer running.")
-    logger.info(
-        "Listening on: {} for ip: {}, ports: {}".format(interface, address, port_list)
-    )
 
     if dump_packets:
-        logger.info("dumping all packets")
-        dump_packets.write("starting packet dump\n")
+        logger.info("will dump all packets to file")
+        dump_packets.write(f"starting packet dump {datetime.now()}\n")
 
-    analyze_udp_traffic(
-        interface,
-        address,
-        portlist_to_filter(port_list),
-        connections,
-        servers,
-        timeout=None,
-        dump_packets=dump_packets,
-    )
+    watchdog = Watchdog(address, games, packet_limit, script_path, dump_packets)
+    watchdog.analyze_udp_traffic(interface)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 setup(
     name="civpb_watchdog",
     version="2.0.0",
-    author="Olaf S.",
+    author="Olaf S., Zulan",
     python_requires=">=3.7",
     packages=find_packages(),
     scripts=["bin/civpb-confirm-popup", "bin/civpb-kill"],
