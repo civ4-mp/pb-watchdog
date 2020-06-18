@@ -322,7 +322,7 @@ def analyze_udp_traffic(
 
         ip = pkt[IP]
         udp = pkt[UDP]
-        payload = udp.load
+        payload = udp.payload.original
         now = time.time()  # In pycap already part of "pkt" but not in scapy
 
         if dump_packets:
