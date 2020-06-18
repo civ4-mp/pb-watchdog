@@ -97,7 +97,8 @@ class PBNetworkConnection:
         self.number_unanswered_outgoing_packets += 1
         self.time_last_outgoing_packet = now
 
-        self.game.metrics.send(len(payload))
+        # Add 28 bytes for UDP (8) and IP headers (20)
+        self.game.metrics.send(len(payload) + 28)
 
         # logger.info("Package from Server, len={}".format( len(payload)))
         # logger.info("Content: {}".format(payload.hex()))
