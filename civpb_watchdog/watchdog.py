@@ -358,7 +358,7 @@ def analyze_udp_traffic(
                 filter=pcap_filter,
                 timeout=pcap_timeout,
                 store=0,
-                count=1,
+                count=0,  # Capture until SIGINT
                 iface=device,  # None for sniffing on all.
             )
 
@@ -577,7 +577,7 @@ def main(
                 portlist_to_filter(port_list),
                 connections,
                 servers,
-                pcap_timeout=500,
+                pcap_timeout=None,
                 dump_packets=dump_packets,
             )
         except Exception as e:
