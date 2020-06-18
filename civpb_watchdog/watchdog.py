@@ -52,7 +52,7 @@ class Watchdog:
         self._games = {}
         for game_arg in game_args:
             game = Game(game_arg, self)
-            self._games[game.port]
+            self._games[game.port] = game
 
         self._ip_address = ip_address
 
