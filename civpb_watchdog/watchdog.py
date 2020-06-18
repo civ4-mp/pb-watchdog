@@ -116,14 +116,14 @@ class PBNetworkConnection:
         # Thus, if we ignore packages with length 3 and 8 we"ve
         # got an indicator for the server sanity.
 
-        if len(payload) not in [3, 8]:
+        if len(payload) not in [5, 10]:
             self.watchdog_last_active_server_ts = self.time_last_outgoing_packet
             self.game.network_reply()
 
         # TODO Check if we can also use different payload sizes here, but we
         # need to make sure the specific information about the
         # two 16bit numbers "A, B" is available.
-        if len(payload) not in [23, 35]:
+        if len(payload) not in [25, 37]:
             return
 
         # This package could be indicate an upload error. Add the payload
@@ -181,8 +181,8 @@ class PBNetworkConnection:
         #   B and A+1 are to 16 bit numbers where A and B
         #   are content of "payload"
 
-        aHi, aLow = payload[1], payload[2]
-        bHi, bLow = payload[3], payload[4]
+        aHi, aLow = payload[3], payload[4]
+        bHi, bLow = payload[5], payload[6]
         a_plus_1 = (aHi * 256 + aLow + 1) % 65536
 
         data = bytes([254, 254, 6, bHi, bLow, int(a_plus_1 / 256), (a_plus_1 % 256)])
