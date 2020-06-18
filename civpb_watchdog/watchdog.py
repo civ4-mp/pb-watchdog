@@ -71,7 +71,9 @@ class PBNetworkConnection:
         # outgoing packages.
         # We assume an active server due the creation of this object
         # to avoid false detection of inactivity.
-        self.watchdog_last_active_server_ts = self.time_last_outgoing_packet
+        # opposed to it's sibling time_last_outgoing_packet, this does not
+        # count payload sizes of 5 or 10
+        self.time_last_outgoing_active_packet = self.time_last_outgoing_packet
 
         logger.debug("Detecting new connection {}".format(self))
 
@@ -117,7 +119,7 @@ class PBNetworkConnection:
         # got an indicator for the server sanity.
 
         if len(payload) not in [5, 10]:
-            self.watchdog_last_active_server_ts = self.time_last_outgoing_packet
+            self.time_last_outgoing_active_packet = self.time_last_outgoing_packet
             self.game.network_reply()
 
         # TODO Check if we can also use different payload sizes here, but we
@@ -162,7 +164,7 @@ class PBNetworkConnection:
         # 20 seconds elapse between two packages.
         if (
             now - self.time_last_incoming_packet < 22
-            and now - self.watchdog_last_active_server_ts > 18
+            and now - self.time_last_outgoing_active_packet > 18
         ):
             logger.debug(f"{self!r} - detected no network reply.")
             self.game.no_network_reply()
