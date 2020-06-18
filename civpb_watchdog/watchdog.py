@@ -94,7 +94,7 @@ class Watchdog:
     @property
     def _filter(self):
         f = "udp and ("
-        f += " or ".join([game.port for game in self._games.values()])
+        f += " or ".join([str(game.port) for game in self._games.values()])
         f += ")"
         logging.debug(f"Using filter: '{f}'")
         return f
