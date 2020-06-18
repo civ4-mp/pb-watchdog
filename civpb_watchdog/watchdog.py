@@ -189,8 +189,6 @@ def main(
     if prometheus:
         start_metric_server(prometheus)
 
-    connections = ConnectionRegister(packet_limit=packet_limit)
-
     logger.info("Pitboss upload killer running.")
 
     if dump_packets:
@@ -198,7 +196,7 @@ def main(
         dump_packets.write(f"starting packet dump {datetime.now()}\n")
 
     watchdog = Watchdog(address, games, packet_limit, script_path, dump_packets)
-    watchdog.analyze_udp_traffic(interface)
+    watchdog.analyze_traffic(interface)
 
 
 if __name__ == "__main__":

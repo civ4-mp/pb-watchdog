@@ -17,8 +17,9 @@ class ConnectionRegister:
         # As a daemon thread, this will be cleaned up automatically when the main program ends.
         # Also the main thread will always get the KeyboardInterrupt, so we are fine.
         self._cleanup_thread = Thread(
-            target=self._run_cleanup(), name="connection cleanup", daemon=True
+            target=self._run_cleanup, name="connection cleanup", daemon=True
         )
+        logger.debug("starting cleanup thread")
         self._cleanup_thread.start()
 
     def get(self, client_ip, client_port, server_ip, server_port, now, game):
