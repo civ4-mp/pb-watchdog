@@ -347,6 +347,8 @@ def analyze_udp_traffic(
                 )
             )
 
+        connections.cleanup()
+
     continuous_capture_error_count = 0
     while True:
         connections.cleanup()
