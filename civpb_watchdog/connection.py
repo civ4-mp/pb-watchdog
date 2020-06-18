@@ -131,6 +131,7 @@ class Connection:
             and now - self.time_last_outgoing_active_packet > 18
         ):
             logger.debug(f"{self!r} - detected no network reply.")
+            # TODO (Ramk): Many false positives!
             self.game.no_network_reply()
 
         self.number_unanswered_outgoing_packets = 0
