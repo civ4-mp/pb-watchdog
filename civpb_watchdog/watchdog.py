@@ -33,6 +33,7 @@ import click_config_file
 import click_log
 
 # Packet(s) for sniffing
+import scapy
 from scapy.all import IP, UDP, sniff
 
 from .metrics import GameMetrics, start_metric_server
@@ -546,12 +547,22 @@ def toml_provider(file_path, cmd_name):
     help="enable prometheus metrics at given address:port, set to empty to disable",
 )
 @click.option("--dump-packets", default=None, type=click.File("w+"))
+@click.option("--use-pcap/--no-use-pcap", default=False)
 @click_config_file.configuration_option(provider=toml_provider, implicit=False)
 @click_log.simple_verbosity_option(logger)
 def main(
-    interface, address, games, packet_limit, script_path, prometheus, dump_packets
+    interface,
+    address,
+    games,
+    packet_limit,
+    script_path,
+    prometheus,
+    dump_packets,
+    use_pcap,
 ):
-    print(games, script_path)
+    if use_pcap:
+        scapy.config.conf.use_pcap = True
+
     servers = ServerStatuses(games, script_path=script_path)
     port_list = servers.get_ports()
 
