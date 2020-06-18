@@ -32,7 +32,7 @@ import click_log
 import scapy
 from scapy.all import IP, UDP, sniff
 
-from .connection_register import ConnectionRegister
+from .connection_registry import ConnectionRegistry
 from .game import Game
 from .metrics import capture_errors_total, start_metric_server
 
@@ -49,7 +49,7 @@ class Watchdog:
         self._dump_packets = dump_packets
         self._packet_limit = packet_limit
 
-        self._connections = ConnectionRegister()
+        self._connections = ConnectionRegistry()
         self._games = {}
         for game_arg in game_args:
             game = Game(game_arg, self)

@@ -7,7 +7,7 @@ from .connection import Connection
 logger = logging.getLogger(__name__)
 
 
-class ConnectionRegister:
+class ConnectionRegistry:
     def __init__(self, packet_limit, cleanup_interval=60):
         self.packet_limit = packet_limit
 
