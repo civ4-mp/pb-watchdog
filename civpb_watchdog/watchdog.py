@@ -47,9 +47,8 @@ class Watchdog:
     ):
         self._script_path = script_path
         self._dump_packets = dump_packets
-        self._packet_limit = packet_limit
 
-        self._connections = ConnectionRegistry()
+        self._connections = ConnectionRegistry(packet_limit)
         self._games = {}
         for game_arg in game_args:
             game = Game(game_arg, self)
