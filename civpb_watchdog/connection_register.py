@@ -1,4 +1,5 @@
 import logging
+import time
 from threading import Lock, Thread
 
 from .connection import Connection

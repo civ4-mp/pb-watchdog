@@ -189,7 +189,7 @@ def main(
     if prometheus:
         start_metric_server(prometheus)
 
-    connections = PBNetworkConnectionRegister(packet_limit=packet_limit)
+    connections = ConnectionRegister(packet_limit=packet_limit)
 
     logger.info("Pitboss upload killer running.")
 
