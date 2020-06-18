@@ -32,7 +32,7 @@ import click_log
 import scapy
 from scapy.all import IP, UDP, sniff
 
-from .connection import ConnectionRegister
+from .connection_register import ConnectionRegister
 from .game import Game
 from .metrics import capture_errors_total, start_metric_server
 
