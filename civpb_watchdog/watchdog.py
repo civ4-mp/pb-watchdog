@@ -36,7 +36,7 @@ import click_log
 import scapy
 from scapy.all import IP, UDP, sniff
 
-from .metrics import GameMetrics, start_metric_server
+from .metrics import GameMetrics, capture_errors_total, start_metric_server
 
 # Packets for sending fake client replies
 from .pyip import ip as pyip_ip
@@ -309,10 +309,9 @@ def portlist_to_filter(portlist_str):
 # === Analyse Traffic ===
 # Ideally this function should run forever, but in case of odd errors we return outside to wait a bit
 def analyze_udp_traffic(
-    device, ip_address, pcap_filter, connections, games, pcap_timeout, dump_packets
+    device, ip_address, filter, connections, games, timeout, dump_packets
 ):
     def pb_traffic_monitor_callback(pkt):
-
         if not (IP in pkt and UDP in pkt):
             # May be true if some port scanner knocks on PBServer port?!
             # The current traffic filter prevent getting such packets here.
@@ -320,13 +319,11 @@ def analyze_udp_traffic(
 
         assert IP in pkt, "No IP packet"
         assert UDP in pkt, "Packet is no UDP traffic"
-        # print(pkt.summary())
-        # print("." if pkt[IP].src == ip_address else "c", end="", flush=True)
 
         ip = pkt[IP]
         udp = pkt[UDP]
         payload = udp.payload.original
-        now = time.time()  # In pycap already part of "pkt" but not in scapy
+        now = pkt.time
 
         if dump_packets:
             dump_packets.write(
@@ -352,29 +349,28 @@ def analyze_udp_traffic(
 
         connections.cleanup()
 
-    continuous_capture_error_count = 0
+    capture_errors = 0
     while True:
         connections.cleanup()
         try:
-            if continuous_capture_error_count > 20:
-                return
-
+            # This should never complete without an exception
             sniff(
                 prn=pb_traffic_monitor_callback,
-                filter=pcap_filter,
-                timeout=pcap_timeout,
+                filter=filter,
+                timeout=timeout,
                 store=0,
                 count=0,  # Capture until SIGINT
                 iface=device,  # None for sniffing on all.
             )
-
+        except KeyboardInterrupt:
+            return
         except Exception as e:
-            logger.info("Capture.error: {}".format(e))
-            continuous_capture_error_count += 1
-            continue
+            logger.error("exception from sniffing: {}".format(e))
+        else:
+            logger.error("sniff returned normally, this should never happen")
 
-        # Capture looks good, lets reset error count
-        continuous_capture_error_count = 0
+        capture_errors_total.inc()  # collect metrics
+        time.sleep(10)
 
 
 # Strategies of civpb_watchdog
@@ -585,22 +581,15 @@ def main(
         logger.info("dumping all packets")
         dump_packets.write("starting packet dump\n")
 
-    while True:
-        try:
-            analyze_udp_traffic(
-                interface,
-                address,
-                portlist_to_filter(port_list),
-                connections,
-                servers,
-                pcap_timeout=None,
-                dump_packets=dump_packets,
-            )
-        except Exception as e:
-            logger.error("Caught exception {}".format(e))
-            traceback.print_exc()
-        logger.warning("Taking a break before resuming analysis.")
-        time.sleep(10)
+    analyze_udp_traffic(
+        interface,
+        address,
+        portlist_to_filter(port_list),
+        connections,
+        servers,
+        timeout=None,
+        dump_packets=dump_packets,
+    )
 
 
 if __name__ == "__main__":

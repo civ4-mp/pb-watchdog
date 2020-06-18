@@ -40,6 +40,10 @@ revives_total = Counter(
     ("game", "strategy"),
 )
 
+capture_errors_total = Counter(
+    "civpb_watchdog_capture_errors_total", "Number of capture errors",
+)
+
 info = Info("civpb_watchdog", "Civilization 4 Pitboss watchdog version information")
 info.info(
     {
