@@ -24,13 +24,11 @@ import traceback
 from datetime import datetime
 
 import click
-import toml
-
 import click_config_file
 import click_log
-
 # Packet(s) for sniffing
 import scapy
+import toml
 from scapy.all import IP, UDP, sniff
 
 from .connection_registry import ConnectionRegistry
@@ -44,7 +42,12 @@ click_log.basic_config(logger)
 
 class Watchdog:
     def __init__(
-        self, ip_address, game_args, packet_limit, script_path, dump_packets,
+        self,
+        ip_address,
+        game_args,
+        packet_limit,
+        script_path,
+        dump_packets,
     ):
         self._script_path = script_path
         self._dump_packets = dump_packets
@@ -74,28 +77,37 @@ class Watchdog:
             )
 
         with self._connections.lock:
-            if ip.src == self._ip_address:
-                game = self._games[udp.sport]
-                self._connections.get(
-                    ip.dst, udp.dport, ip.src, udp.sport, now, game
-                ).handle_server_to_client(payload, now)
-            elif ip.dst == self._ip_address:
-                game = self._games[udp.dport]
-                self._connections.get(
-                    ip.src, udp.sport, ip.dst, udp.dport, now, game
-                ).handle_client_to_server(payload, now)
-            else:
+            try:
+                if ip.src == self._ip_address:
+                    game = self._games[udp.sport]
+                    self._connections.get(
+                        ip.dst, udp.dport, ip.src, udp.sport, now, game
+                    ).handle_server_to_client(payload, now)
+                elif ip.dst == self._ip_address:
+                    game = self._games[udp.dport]
+                    self._connections.get(
+                        ip.src, udp.sport, ip.dst, udp.dport, now, game
+                    ).handle_client_to_server(payload, now)
+                else:
+                    logger.warning(
+                        "PB server matches neither source ({}) nor destination ({})".format(
+                            ip.src, ip.dst
+                        )
+                    )
+            except KeyError:
                 logger.warning(
-                    "PB server matches neither source ({}) nor destination ({})".format(
-                        ip.src, ip.dst
+                    "Observed packet with UDP port mismatch (ip.src: {}, sport: {}, ip.dst: {} dport: {})".format(
+                        ip.src, udp.sport, ip.dst, udp.dport
                     )
                 )
 
     @property
     def _filter(self):
-        f = "udp and ("
-        f += " or ".join([f"port {game.port}" for game in self._games.values()])
-        f += ")"
+        f = "udp and (src host {self._ip_address} and ("
+        f += " or ".join([f"src port {game.port}" for game in self._games.values()])
+        f += ")) or (dst host {self._ip_address} and ("
+        f += " or ".join([f"dst port {game.port}" for game in self._games.values()])
+        f += "))"
         logging.debug(f"Using filter: '{f}'")
         return f
 
