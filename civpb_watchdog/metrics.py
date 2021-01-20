@@ -20,7 +20,7 @@ packets_bytes_total = Counter(
     labelnames=("game", "direction"),
 )
 connections_concurrent = Gauge(
-    "civpb_watchdog_connections",
+    "civpb_watchdog_connections_active",
     "Number of active connections observed by the Civilization 4 Pitboss watchdog",
     labelnames=("game",),
 )
