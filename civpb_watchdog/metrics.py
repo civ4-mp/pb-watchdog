@@ -49,7 +49,6 @@ info.info(
     {
         # https://stackoverflow.com/a/2073599/620382
         "version": pkg_resources.require("civpb_watchdog")[0].version,
-        "python_version": sys.version,
     }
 )
 
