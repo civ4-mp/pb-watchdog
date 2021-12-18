@@ -1,8 +1,7 @@
 import logging
 
-import pkg_resources
-
 import click_log
+import pkg_resources
 from prometheus_client import Counter, Gauge, Info, start_http_server
 
 logger = logging.getLogger(__name__)
@@ -40,14 +39,15 @@ revives_total = Counter(
 )
 
 capture_errors_total = Counter(
-    "civpb_watchdog_capture_errors_total", "Number of capture errors",
+    "civpb_watchdog_capture_errors_total",
+    "Number of capture errors",
 )
 
 info = Info("civpb_watchdog", "Civilization 4 Pitboss watchdog version information")
 info.info(
     {
         # https://stackoverflow.com/a/2073599/620382
-        "version": pkg_resources.require("civpb_watchdog")[0].version,
+        "version": pkg_resources.require("civ4-mp.pb-watchdog")[0].version,
     }
 )
 
