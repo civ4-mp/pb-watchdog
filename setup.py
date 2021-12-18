@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="civ4-mp.pb-watchdog",
-    version="2.0.0",
+    version="2.0.1",
     author="Olaf S., Zulan",
     python_requires=">=3.7",
     packages=find_packages(),
